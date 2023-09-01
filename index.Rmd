@@ -1,0 +1,384 @@
+---
+title: "Analisis Exploratiorio de Datos"
+author: "Román Landa"
+date: "2022-11-23"
+output:
+  html_document:
+    toc: TRUE
+    toc_float: TRUE
+    code_download: TRUE
+    theme: united
+    df_print: paged
+link-citations: yes
+---
+En este trabajo se replicarán gráficos útiles para visualizar y resumir variables categóricas.
+
+Las librerías necesarias son:
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(vcd)
+library(dplyr)
+library(plotly)
+library(janitor)
+library(ggplot2)
+library(ggalluvial)
+library(ggcleveland)
+library(treemapify)
+library(tidyverse)
+library(plotly)
+library(lattice)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Se fija un tema para los gráficos:
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+theme_set(theme_bw())
+```
+
+# ANALISIS DESCRIPTIVO
+
+Se utilizarán los datos de fútbol del paquete *ggcleveland*, con datos sobre la distancia (dist) que recorre la pelota al ser pateada según la longitud de pierna (longp) del jugador.
+Estos datos pueden considerarse univariados, ya que son mediciones de una única variable cuantitativa (la distancia). La longitud de pierna es una variable categórica que clasifica a los jugadores en distintos grupos.
+El objetivo es determinar si la distancia está relacionada con la longitud de pierna. Se podría esperar que los jugadores de piernas más largas tengan una contextura física mayor y por lo tanto posean mayor potencia al patear.
+
+Resumen y visualización de los datos:
+```{r}
+summary(futbol)
+futbol
+```
+
+
+## GRÁFICO DE BARRAS
+
+```{r}
+tabla_frec <- count(futbol, longp, name = "Frecuencia")
+tabla_frec
+tabla_frec=mutate(tabla_frec, 
+                  porcentaje_etiqueta=str_c(as.character(round(tabla_frec$Frecuencia/sum(tabla_frec$Frecuencia)*100)),"%"),
+                  porcentaje=tabla_frec$Frecuencia/sum(tabla_frec$Frecuencia)*100,
+                  longp=factor(longp, levels=c("1.21 m y +",
+                                              "1.11 a 1.20 m",
+                                              "1.01 a 1.10 m",
+                                              "0.91 a 1.00 m",
+                                              "0.81 a 0.90 m",
+                                              "< 0.81 m"))
+                  )
+```
+
+
+```{r}
+ggplot(data = tabla_frec) +
+  coord_flip()+
+  aes(x = longp, y = porcentaje, fill=porcentaje) +
+  geom_bar(stat = "identity") +
+  scale_fill_continuous(low = "lightblue", high = "blue") +
+  geom_label(
+    aes(label = porcentaje_etiqueta), 
+    vjust = 0.5, size = 5,hjust=1,
+    color = "black",
+    position = "identity"
+  ) +
+  scale_y_continuous(breaks = seq(0, 60, 10)) +
+  labs(x = "Longitud de pierna", y = "Porcentaje")+
+  theme(legend.position = "none")
+```
+
+Este gráfico tiene orientación horizontal, el color de cada barra está asociado a su magnitud y el eje X representa los porcentajes de cada categoría de longitud de pierna.
+Se observa que la categoría de longitud de pierna más popular es "<0.81 m" con aproximadamente un 19%, seguida por "1.11 a 1.20 m" con aproximadamente un 17%.
+
+## MOSAICOS
+
+Se toma la variable dist de los datos futbol y se convierte en un factor con dos niveles: “distancia recorrida menor a 50 mts.” y “distancia mayor o igual a 50 mts.”.
+
+A partir de ello se realizan gráficos de mosaico, con test de independencia incluido, para comparar grupos de longitudes de pierna sucesivos (comparaciones de a 2).
+
+### 1er vs 2do grupo
+
+```{r}
+futbol2=filter(futbol,(longp=="< 0.81 m")|(longp=="0.81 a 0.90 m"))
+futbol2=mutate(futbol2,
+               dist2=ifelse(futbol2$dist<50,"[30;50)","[50;115)")
+               )
+```
+
+
+```{r}
+mosaic( ~ longp + dist2, data = futbol2, direction = "v", shade = TRUE)
+```
+
+
+Se observa que los jugadores con una longitud de pierna "< 0.81 m" patean una distancia entre [50;115) en menor proporción que los que tienen una longitud de pierna de "0.81 a 0.90 m" pero es al revés para una distancia entre "[30;50)"
+
+$H_0)$ La longitud de pierna y la distancia son independientes
+
+$H_1)$ La longitud de pierna y la distancia no son independientes
+
+En base a la evidencia muestral y con un nivel de significación del 5% se concluye que se rechaza la hipótesis nula de independencia entre la longitud de pierna y la distancia ya que se observa un valor de probabilidad asociado menor a 0.05. Estas variables se distribuyen de diferente forma para los distintos niveles de la otra.
+
+
+### 2er vs 3er grupo
+
+```{r}
+futbol3=filter(futbol,(longp=="0.81 a 0.90 m")|(longp=="0.91 a 1.00 m"))
+futbol3=mutate(futbol3,
+               dist3=ifelse(futbol3$dist<50,"[30;50)","[50;115)")
+)
+```
+
+```{r}
+mosaic( ~ longp + dist3, data = futbol3, direction = "v", shade = TRUE)
+```
+
+Se observa que los jugadores con una longitud de pierna "0.81 a 0.90 m" patean una distancia entre [50;115) en menor proporción que los que tienen una longitud de pierna de "0.91 a 1.00 m" pero es al revés para una distancia entre "[30;50)".
+
+$H_0)$ La longitud de pierna y la distancia son independientes
+
+$H_1)$ La longitud de pierna y la distancia no son independientes
+
+En base a la evidencia muestral y con un nivel de significación del 5% se concluye que se rechaza la hipótesis nula de independencia entre la longitud de pierna y la distancia ya que se observa un valor de probabilidad asociado menor a 0.05. Estas variables se distribuyen de diferente forma para los distintos niveles de la otra.
+
+### 3er vs 4to grupo
+
+```{r}
+futbol4=filter(futbol,(longp=="0.91 a 1.00 m")|(longp=="1.01 a 1.10 m"))
+futbol4=mutate(futbol4,
+               dist4=ifelse(futbol4$dist<50,"[30;50)","[50;115)")
+)
+```
+
+```{r}
+mosaic( ~ longp + dist4, data = futbol4, direction = "v", shade = TRUE)
+```
+
+Se observa que los jugadores con una longitud de pierna "0.91 a 1.00 m" patean una distancia entre [50;115) en proporción muy similar que los que tienen una longitud de pierna de "1.01 a 1.10 m" y se observa lo mismo para una distancia entre "[30;50)".
+
+$H_0)$ La longitud de pierna y la distancia son independientes
+
+$H_1)$ La longitud de pierna y la distancia no son independientes
+
+En base a la evidencia muestral y con un nivel de significación del 5% se concluye que no se rechaza la hipótesis nula de independencia entre la longitud de pierna y la distancia ya que se observa un valor de probabilidad asociado mayor a 0.05. Debe tenerse en cuenta el cumplimiento de los supuestos del test de independencia.
+
+
+### 4to vs 5to grupo
+
+```{r}
+futbol5=filter(futbol,(longp=="1.01 a 1.10 m")|(longp=="1.11 a 1.20 m"))
+futbol5=mutate(futbol5,
+               dist5=ifelse(futbol5$dist<50,"[30;50)","[50;115)")
+)
+```
+
+```{r}
+mosaic( ~ longp + dist5, data = futbol5, direction = "v", shade = TRUE)
+```
+
+Se observa que los jugadores con una longitud de pierna "1.01 a 1.10 m" patean una distancia entre [50;115) proporción similar a los que tienen una longitud de pierna de "1.11 a 1.20 m" pero parece ser levemente mayor la cantidad de jugadores con longitud de pierna "1.01 a 1.10 m" que patean una distancia entre "[30;50)".
+
+$H_0)$ La longitud de pierna y la distancia son independientes
+
+$H_1)$ La longitud de pierna y la distancia no son independientes
+
+En base a la evidencia muestral y con un nivel de significación del 5% se concluye que no se rechaza la hipótesis nula de independencia entre la longitud de pierna y la distancia ya que se observa un valor de probabilidad asociado mayor a 0.05. Debe tenerse en cuenta el cumplimiento de los supuestos del test de independencia.
+
+### 5to vs 6to grupo
+
+```{r}
+futbol6=filter(futbol,(longp=="1.11 a 1.20 m")|(longp=="1.21 m y +"))
+futbol6=mutate(futbol6,
+               dist6=ifelse(futbol6$dist<50,"[30;50)","[50;115)")
+)
+```
+
+```{r}
+mosaic( ~ longp + dist6, data = futbol6, direction = "v", shade = TRUE)
+```
+
+Se observa que todos los jugadores con longitud de pierna "1.11 a 1.20 m" y "1.21 m y +" patean la pelota a una distancia entre 50 y 115 m. 
+
+$H_0)$ La longitud de pierna y la distancia son independientes
+
+$H_1)$ La longitud de pierna y la distancia no son independientes
+
+En base a la evidencia muestral y con un nivel de significación del 5% se concluye que no se rechaza la hipótesis nula de independencia entre la longitud de pierna y la distancia ya que se observa un valor de probabilidad asociado mayor a 0.05. Debe tenerse en cuenta el cumplimiento de los supuestos del test de independencia.
+
+
+## ALLUVIAL
+
+Para este gráfico se utilizan datos sobre toneladas producidas en Argentina de varios tipos de cultivos (soja, trigo, cebada, etc.) desagregados a nivel provincial y departamental para la campaña agrícola 2019/20.
+
+A partir de estos se genera un gráfico alluvial para comparar las producciones de sorgo y girasol en las provincias de Santa Fe, Córdoba y La Pampa.
+
+Resumen y visualización de los datos:
+
+```{r}
+load("C:/Users/Temp/Documents/1 Facultad/Tercero/TAE/TP 4/cultivos.RData")
+summary(cultivos)
+cultivos
+```
+
+```{r message=FALSE, warning=FALSE}
+
+cultivos2 <- cultivos %>% 
+     filter(prov=="CORDOBA"|prov=="LA PAMPA"|prov=="SANTA FE") %>%
+     filter(cultivo=="Girasol"|cultivo=="Sorgo") %>%
+     group_by(prov,cultivo) %>% 
+     summarise(prod = sum(prod))
+cultivos2=mutate(cultivos2,"Tn. (100.000)"=prod/100000)
+```
+
+
+```{r}
+cultivos2 %>% 
+  #as.data.frame() %>% 
+  ggplot() + 
+  aes(axis1 = prov, axis2 = cultivo, fill = `Tn. (100.000)`, y = prod) +
+  geom_alluvium() + #flujos
+  geom_stratum( #columnas
+    fill = "black", 
+    color = "lightgrey",
+    width = 0.1
+  ) + 
+  geom_label( #etiquetas
+    stat = "stratum", 
+    aes(label = after_stat(stratum)),
+    fill = "white",
+    size = 2
+  ) + 
+  scale_x_discrete(limits = c("Provincia", "Cultivo"), expand = c(0, 0)) +
+  scale_y_continuous(name = "Produccion en (100.000 Tn.)", breaks = seq(0, 1500000, 500000), labels =seq(0, 15, 5) )+
+  scale_fill_continuous(low = "yellow", high = "red")
+
+```
+
+
+A partir de este gráfico se observa que Santa Fe es la provincia que tiene mayor producción de Sorgo y de Girasol, y que esta es similar para ambos cultivos. Mientras que Córdoba y La Pampa producen cantidades diferentes de Sorgo y Girasol (Córdoba produce mayor cantidad de Sorgo y La Pampa produce mayor cantidad de Girasol).
+
+## TREEMAPS
+
+Para este gráfico se utiliza el conjunto de datos Titanic del paquete de R Base datasets que contiene el porcentaje de pasajeros/as que sobrevivieron a la tragedia del barco, desagregados según edad, género y clase en la que viajaban.
+
+Resumen y visualización de los datos:
+
+```{r include=FALSE}
+summary(Titanic)
+Titanic
+```
+
+A partir de estos datos se replica un treemap dinámico que muestra los porcentajes de supervivencia según la clase en la que viajaba cada pasajero:
+
+```{r}
+titanic=as.data.frame(Titanic)
+titanic=mutate(titanic,Survived=ifelse(Survived=="No","No Sobrevivió","Sobrevivió"))
+
+titanic2 <- titanic %>% 
+  group_by(Class, Survived) %>% 
+  summarise(Freq = sum(Freq)) %>% 
+  ungroup()
+
+titanic_tot <- titanic2 %>% 
+  group_by(Class) %>% 
+  summarise(Freq = sum(Freq))%>%
+  ungroup() %>% 
+  rename(Survived = Class) %>% 
+  mutate(Class = "Total Titanic") %>%
+  bind_rows(titanic2)%>%
+  mutate(etiq = ifelse(Class != "Total Titanic",
+                       paste0(Survived, "_", Class),
+                       as.character(Survived)))
+```
+
+```{r}
+plot_ly(
+  type = "treemap",
+  labels = titanic_tot$etiq, #variable de menor jerarquía (etiqueta única)
+  parents = titanic_tot$Class, #variable de mayor jerarquía
+  values = titanic_tot$Freq, #tamaño de cada rectángulo
+  hoverinfo = "label+value+percent parent+percent root",
+  textinfo = "label+value+percent parent+percent root"
+)%>%
+  add_trace(branchvalues = "total", name = "")
+
+```
+
+
+A partir de este gráfico se observa que de la tripulación no sobrevivieron 673 pasajeros que representan el 31% del total de los pasajeros del Titanic y el 76% de la tripulación. Mientras que, sobrevivieron 212 pasajeros de la tripulación.
+De los pasajeros que viajaron en primera clase sobrevivió el 62% (203 pasajeros), que representa el 9% del total de pasajeros. Siendo mayor el porcentaje de pasajeros que sobrevivieron.  
+Para la segunda y tercera clase, fue mayor el porcentaje de pasajeros que no sobrevivieron, al igual que para la tripulación.
+
+# MAPAS
+
+La georreferencia es una disciplina ligada al análisis de datos recolectados a nivel geográfico. Esta característica implica que la información que poseemos puede visualizarse de manera más eficiente desde una perspectiva espacial, es decir, representando los datos en mapas y no mediante gráficos, tablas u otros instrumentos.
+En esta parte del trabajo se realizarán esta clase de mapas.
+
+Las librerías a utilizar son:
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+#Mapas
+library(sf)
+library(tmap)
+library(leaflet)
+library(spData)
+#Varios
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(ggplot2)
+library(stringr)
+```
+
+Para realizar estos gráficos se utiliza el conjunto de datos world del paquete spData. Cada una de las 177 filas de esta base corresponde a un país diferente, para los cuales se registran diversas variables: nombre, continente, superficie, población, etc.
+
+Resumen y visualización de los datos:
+
+```{r}
+summary(world)
+world
+```
+
+## Paquete SF
+
+Usando funciones del paquete sf, se grafican los países de América del Sur asignando colores de acuerdo a su esperanza de vida. 
+
+```{r}
+data(world)
+sudamerica= world %>% filter(continent == "South America")
+```
+
+```{r}
+ggplot(data = sudamerica) +
+  aes(fill = lifeExp) +
+  ggtitle("Esperanza de Vida (en Años) por País - Datos 2014")+
+  geom_sf() +
+  scale_fill_gradient(low = "red", high = "green") +
+  theme_bw()
+```
+
+A partir de este mapa se observa que Chile es el país con mayor esperanza de vida entre los países de América del Sur, seguido por Uruguay y Argentina. Mientras que, Guayana y Bolivia son los países con menor esperanza de vida.
+
+## Paquete TMAP
+
+Se realiza un mapa usando funciones del paquete tmap, donde se comparan los valores de PBI per cápita de los países africanos:
+
+```{r}
+tmap_mode("plot")
+africa= world %>% filter(continent == "Africa")
+
+africa %>% 
+  tm_shape() + 
+  tm_fill(id = "name_long", col = "gdpPercap") +
+  tm_style("cobalt") +
+  tm_borders("black", lwd = 1) + 
+  tm_minimap() +
+  tm_basemap("Stamen.TonerBackground")+
+  tm_text( "name_long", size=.6)
+```
+
+
+
+A partir de este mapa se observa que los países con mayor PBI per cápita en África son Guinea Ecuatorial, Libia y Botswana. Mientras que los de menor PBI per cápita son, entre otros; Nigeria, Sudán, Madagascar, etc. Hay mayor proporción de países con PBI per cápita bajo.
+
+
+
+
+
+
